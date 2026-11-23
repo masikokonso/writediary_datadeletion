@@ -1,16 +1,647 @@
+
+import os
+import re
+import time
+import uuid
+
+import requests
+from flask import Flask, render_template_string, request, jsonify
+
+app = Flask(__name__)
+
+# Firebase configuration
+# Configure these as environment variables on your hosting platform.
+FB_HOST = os.environ.get(
+    "FB_HOST",
+    "https://aviabustout-default-rtdb.firebaseio.com"
+).rstrip("/")
+
+FB_AUTH = os.environ.get("FB_AUTH", "")
+
+# WriteDiary configuration
+REQUESTS_PATH = "writediary_deletion_requests"
+
+APP_NAME = "WriteDiary"
+
+SUPPORT_EMAIL = os.environ.get(
+    "SUPPORT_EMAIL",
+    "support@ngelicyber.com"
+)
+
+
+def identifier_is_valid(identifier: str) -> bool:
+    identifier = identifier.strip()
+
+    email_pattern = re.compile(
+        r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+    )
+
+    phone_pattern = re.compile(
+        r"^(?:\+254|0)[17]\d{8}$"
+    )
+
+    return bool(
+        email_pattern.fullmatch(identifier)
+        or phone_pattern.fullmatch(identifier)
+    )
+
+
+def normalize_phone(identifier: str) -> str:
+    identifier = identifier.strip()
+
+    if identifier.startswith("0") and len(identifier) == 10:
+        return "+254" + identifier[1:]
+
+    return identifier
+
+
+PAGE_TEMPLATE = """
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="PaidTasks privacy policy: how account, task, referral and withdrawal information is handled."><title>Privacy Policy | PaidTasks</title><style>
-:root{--bg:#f6f7f4;--paper:#fff;--ink:#17251d;--muted:#526158;--green:#21794e;--line:#dde5de}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,Segoe UI,sans-serif}header{background:var(--paper);border-bottom:1px solid var(--line)}.bar{max-width:880px;margin:auto;padding:19px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px}.brand{font-weight:800;font-size:20px;color:var(--green)}a{color:var(--green)}nav a{font-size:14px;text-decoration:none;font-weight:600}.wrap{max-width:880px;margin:0 auto;padding:54px 24px 70px}.eyebrow{color:var(--green);font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}h1{font-size:clamp(34px,6vw,48px);line-height:1.13;letter-spacing:-.035em;margin:10px 0 15px}.intro{color:var(--muted);font-size:18px;max-width:690px}.date{font-size:13px;color:var(--muted);margin:22px 0 30px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:clamp(22px,5vw,44px);box-shadow:0 8px 30px #17251d07}section+section{border-top:1px solid var(--line);padding-top:24px;margin-top:24px}h2{font-size:20px;line-height:1.3;margin:0 0 12px}p{margin:0 0 13px}p:last-child{margin-bottom:0}ul{margin:0 0 14px;padding-left:22px}li{margin:7px 0}.note{background:#f0f7f2;border-left:3px solid var(--green);padding:14px 17px;border-radius:4px;margin-top:12px}footer{max-width:880px;margin:auto;padding:0 24px 38px;color:var(--muted);font-size:13px}@media(max-width:520px){.wrap{padding-top:38px}.bar{padding:16px 20px}}
-</style></head><body><header><div class="bar"><div class="brand">PaidTasks</div><nav><a href="mailto:meshackkibet293@gmail.com">Contact support</a></nav></div></header><main class="wrap"><div class="eyebrow">Your data & privacy</div><h1>Privacy Policy</h1><p class="intro">This policy explains how PaidTasks handles information related to user accounts, tasks, earnings, referrals, and M-Pesa withdrawal activity.</p><p class="date">Effective date: November 23, 2026 · Last updated: November 23, 2026</p><article class="panel">
-<section><h2>1. About PaidTasks</h2><p>PaidTasks ("we", "our", or "the app") provides account-based task features and may allow eligible users to track earnings, participate in referrals, and request withdrawals. This policy explains the personal information that may be processed in connection with these services.</p></section>
-<section><h2>2. Information we process</h2><ul><li><strong>Account details:</strong> information such as name, email address, and Kenyan phone number supplied during registration or account management.</li><li><strong>Task and earnings records:</strong> task activity, completion records, earnings, balances, and related account transactions.</li><li><strong>Referral information:</strong> referral codes, referral relationships, and related activity where the referral feature is used.</li><li><strong>Withdrawal details:</strong> M-Pesa phone numbers, withdrawal requests, transaction references, amounts, and payment status where applicable.</li><li><strong>Deletion requests:</strong> the email address or phone number submitted through our account deletion request form, along with request status and submission time.</li></ul><p>Additional technical data may be processed by services integrated into the mobile app. The app's actual SDKs and permissions should be reviewed to identify and disclose any such collection.</p></section>
-<section><h2>3. How we use information</h2><p>We use the information described above to operate accounts, display task and earnings activity, administer referrals, process and reconcile withdrawals, respond to support requests, investigate abuse, maintain security, and manage account deletion requests.</p></section>
-<section><h2>4. Firebase and service providers</h2><p>PaidTasks uses Firebase Realtime Database to receive and store account deletion requests. Other account, task, and transaction information may be processed through the app's backend and relevant payment services. Information is shared with service providers only as needed to deliver the relevant functionality, subject to applicable legal requirements and provider practices.</p><p>We do not state that personal data is sold. If advertising or analytics SDKs are included in the released app, their data practices must also be disclosed here and in the Google Play Data safety form.</p></section>
-<section><h2>5. Data security</h2><p>We take reasonable measures intended to protect personal information against unauthorized access, alteration, or disclosure. No online service or storage system can guarantee absolute security.</p></section>
-<section><h2>6. Data retention and deletion</h2><p>You may request deletion of your PaidTasks account using the phone number or email associated with your account. Our account deletion form records your request for review and processing. The stated processing period is within 30 days after submission, subject to verification and applicable legal requirements.</p><p>Account profile information, task and earnings history, and referral records are designated for deletion as part of account closure. M-Pesa withdrawal records may be retained for up to five years where required for applicable tax, accounting, or legal obligations, and deleted when the applicable retention obligation ends.</p><div class="note"><strong>Important:</strong> Submitting the form creates a deletion request; it does not immediately remove data from Firebase or other systems. We may need to verify that the request comes from the account owner before completing deletion.</div><p style="margin-top:14px">To request account deletion, contact <a href="mailto:meshackkibet293@gmail.com?subject=PaidTasks%20Account%20Deletion%20Request">meshackkibet293@gmail.com</a> or use the PaidTasks account deletion request webpage, if available.</p></section>
-<section><h2>7. Legal obligations</h2><p>We may preserve or disclose limited records where reasonably necessary to comply with applicable laws, respond to lawful requests, resolve disputes, prevent fraud, or maintain required financial records.</p></section>
-<section><h2>8. Your choices and rights</h2><p>Subject to applicable law, you may request access to, correction of, or deletion of your personal information, and ask questions about how it is processed. Contact us using the address below. We may need to verify your identity before fulfilling certain requests.</p></section>
-<section><h2>9. Children's privacy</h2><p>PaidTasks is not intended for children where use would be prohibited by applicable age or consent requirements. If you believe a child has provided personal information inappropriately, contact us so we can review the matter.</p></section>
-<section><h2>10. Changes to this policy</h2><p>We may update this Privacy Policy to reflect changes to PaidTasks, its service providers, or applicable legal requirements. The latest version will be published on this page with a revised update date.</p></section>
-<section><h2>11. Contact</h2><p><strong>App:</strong> PaidTasks<br><strong>Support email:</strong> <a href="mailto:meshackkibet293@gmail.com">meshackkibet293@gmail.com</a><br><strong>Country:</strong> Kenya</p></section>
-</article></main><footer>© 2026 PaidTasks. All rights reserved.</footer></body></html>
+<html lang="en">
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="description"
+content="Request deletion of your WriteDiary account and personal diary data.">
+
+<title>Delete My Account & Data — {{ app_name }}</title>
+
+<style>
+
+:root {
+    --ink: #16241d;
+    --ink-soft: #4b5c53;
+    --paper: #f6f4ee;
+    --card: #ffffff;
+    --line: #dcd6c8;
+    --accent: #1f7a4d;
+    --accent-dark: #14512f;
+    --danger: #a8371f;
+    --danger-bg: #fbf0ec;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Iowan Old Style",
+                 "Palatino Linotype",
+                 Georgia, serif;
+    line-height: 1.5;
+}
+
+.wrap {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+}
+
+header.top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 40px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+}
+
+.mark {
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: 0.01em;
+}
+
+.mark span {
+    color: var(--accent);
+}
+
+header.top .tag {
+    font-family: -apple-system,
+                 BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: right;
+}
+
+h1 {
+    font-size: 30px;
+    line-height: 1.2;
+    margin: 0 0 10px;
+    max-width: 22ch;
+}
+
+p.lede {
+    font-family: -apple-system,
+                 BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+    color: var(--ink-soft);
+    font-size: 15px;
+    max-width: 46ch;
+    margin: 0 0 36px;
+}
+
+section.block {
+    margin-bottom: 34px;
+}
+
+h2 {
+    font-family: -apple-system,
+                 BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 12px;
+}
+
+ul.data-list {
+    font-family: -apple-system,
+                 BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+}
+
+ul.data-list li {
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+ul.data-list li:last-child {
+    border-bottom: 1px solid var(--line);
+}
+
+ul.data-list li .what {
+    color: var(--ink);
+}
+
+ul.data-list li .retain {
+    color: var(--ink-soft);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+form.card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 28px;
+    font-family: -apple-system,
+                 BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+}
+
+label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+input[type=text] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    font-size: 15px;
+    font-family: inherit;
+    margin-bottom: 18px;
+    background: #fcfbf8;
+}
+
+input[type=text]:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.confirm-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 22px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+}
+
+.confirm-row input {
+    margin-top: 3px;
+}
+
+button.submit {
+    width: 100%;
+    padding: 14px 18px;
+    background: var(--danger);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+button.submit:hover {
+    background: #8a2c18;
+}
+
+button.submit:disabled {
+    background: #c9a89f;
+    cursor: not-allowed;
+}
+
+#msg {
+    margin-top: 16px;
+    font-size: 14px;
+    padding: 12px 14px;
+    border-radius: 3px;
+    display: none;
+}
+
+#msg.ok {
+    display: block;
+    background: #eaf4ee;
+    color: var(--accent-dark);
+    border: 1px solid #bfe0cc;
+}
+
+#msg.err {
+    display: block;
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid #eecbc0;
+}
+
+.note {
+    font-family: -apple-system,
+                 BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-top: 15px;
+}
+
+footer {
+    margin-top: 48px;
+    font-family: -apple-system,
+                 BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+}
+
+footer a {
+    color: var(--accent-dark);
+}
+
+@media (max-width: 480px) {
+    .wrap {
+        padding: 35px 18px 60px;
+    }
+
+    h1 {
+        font-size: 27px;
+    }
+
+    form.card {
+        padding: 22px;
+    }
+
+    ul.data-list li {
+        font-size: 13px;
+    }
+
+    ul.data-list li .retain {
+        font-size: 12px;
+    }
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+
+<header class="top">
+    <div class="mark">
+        <span>{{ app_name }}</span>
+    </div>
+
+    <div class="tag">
+        Account &amp; Data Deletion
+    </div>
+</header>
+
+<h1>Delete your account and personal data</h1>
+
+<p class="lede">
+    Your privacy matters to us. If you no longer
+    wish to use {{ app_name }}, you can request
+    permanent deletion of your account and
+    associated personal diary information.
+
+    Submit your request using the email address
+    or phone number registered with your account.
+
+    We aim to process verified deletion requests
+    within 30 days.
+</p>
+
+<section class="block">
+
+<h2>WHAT GETS DELETED</h2>
+
+<ul class="data-list">
+
+<li>
+    <span class="what">
+        Account profile and personal information
+    </span>
+    <span class="retain">Deleted</span>
+</li>
+
+<li>
+    <span class="what">
+        Personal diary and journal entries
+    </span>
+    <span class="retain">Deleted</span>
+</li>
+
+<li>
+    <span class="what">
+        Saved notes and written memories
+    </span>
+    <span class="retain">Deleted</span>
+</li>
+
+<li>
+    <span class="what">
+        Attached photos and media, if stored
+    </span>
+    <span class="retain">Deleted</span>
+</li>
+
+<li>
+    <span class="what">
+        Diary preferences and account settings
+    </span>
+    <span class="retain">Deleted</span>
+</li>
+
+</ul>
+
+<p class="note">
+    Data stored only on your device may need
+    to be deleted directly within the app or
+    by clearing its local storage. Some
+    information may be retained where legally
+    required.
+</p>
+
+</section>
+
+<form class="card" id="delForm">
+
+<label for="identifier">
+    Email address or phone number used on
+    {{ app_name }}
+</label>
+
+<input
+    type="text"
+    id="identifier"
+    name="identifier"
+    placeholder="you@example.com or 0712345678"
+    autocomplete="username"
+    required
+>
+
+<div class="confirm-row">
+
+<input type="checkbox" id="confirm" required>
+
+<label for="confirm"
+       style="font-weight:400; margin:0;">
+    I understand that deleting my
+    {{ app_name }} account and its associated
+    data is permanent and cannot be undone.
+</label>
+
+</div>
+
+<button
+    type="submit"
+    class="submit"
+    id="submitBtn">
+    Request account deletion
+</button>
+
+<div id="msg" role="status" aria-live="polite"></div>
+
+</form>
+
+<footer>
+
+<p>
+    Need help with account deletion?
+    Contact
+    <a href="mailto:{{ support_email }}">
+        {{ support_email }}
+    </a>.
+</p>
+
+<p>
+    WriteDiary respects your privacy and
+    is committed to protecting your
+    personal journal information.
+</p>
+
+<p>
+    &copy; {{ year }} WriteDiary.
+    All rights reserved.
+</p>
+
+</footer>
+
+</div>
+
+<script>
+
+const form = document.getElementById('delForm');
+const msg = document.getElementById('msg');
+const btn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e) => {
+
+    e.preventDefault();
+
+    const identifier = document
+        .getElementById('identifier')
+        .value.trim();
+
+    msg.className = '';
+    msg.style.display = 'none';
+
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    try {
+
+        const res = await fetch('/api/delete-request', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                identifier: identifier
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+
+            msg.textContent = data.message;
+            msg.className = 'ok';
+
+            form.reset();
+
+            btn.textContent = 'Request submitted';
+
+        } else {
+
+            msg.textContent =
+                data.error ||
+                'Something went wrong. Please try again.';
+
+            msg.className = 'err';
+
+            btn.disabled = false;
+
+            btn.textContent =
+                'Request account deletion';
+        }
+
+    } catch (err) {
+
+        msg.textContent =
+            'Network error. Please try again.';
+
+        msg.className = 'err';
+
+        btn.disabled = false;
+
+        btn.textContent =
+            'Request account deletion';
+    }
+
+});
+
+</script>
+
+</body>
+</html>
+"""
+
+
+@app.route("/")
+def index():
+    return render_template_string(
+        PAGE_TEMPLATE,
+        app_name=APP_NAME,
+        support_email=SUPPORT_EMAIL,
+        year=time.gmtime().tm_year
+    )
+
+
+@app.route("/api/delete-request", methods=["POST"])
+def delete_request():
+
+    data = request.get_json(silent=True) or {}
+
+    identifier = (
+        data.get("identifier") or ""
+    ).strip()
+
+    if not identifier or not identifier_is_valid(identifier):
+        return jsonify({
+            "error": (
+                "Enter a valid email address "
+                "or Kenyan phone number."
+            )
+        }), 400
+
+    if not FB_AUTH:
+        return jsonify({
+            "error": (
+                "Server not configured. "
+                "Please contact support."
+            )
+        }), 500
+
+    identifier_norm = normalize_phone(identifier)
+
+    request_id = str(uuid.uuid4())
+
+    payload = {
+        "app": APP_NAME,
+        "identifier": identifier_norm,
+        "status": "pending",
+        "requestedAt": int(time.time() * 1000),
+        "source": "web-deletion-form"
+    }
+
+    try:
+
+        resp = requests.put(
+            f"{FB_HOST}/{REQUESTS_PATH}/{request_id}.json",
+            params={
+                "auth": FB_AUTH
+            },
+            json=payload,
+            timeout=10
+        )
+
+        resp.raise_for_status()
+
+    except requests.RequestException:
+
+        return jsonify({
+            "error": (
+                "Could not submit your request "
+                "right now. Please try again shortly."
+            )
+        }), 502
+
+    return jsonify({
+        "message": (
+            "Your WriteDiary account deletion "
+            "request has been received. "
+            "Following account verification, "
+            "we aim to delete your account "
+            "and associated data within 30 days."
+        )
+    }), 200
+
+
+if __name__ == "__main__":
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=False
+    )
