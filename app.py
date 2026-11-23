@@ -417,7 +417,7 @@ footer a {
 <form class="card" id="delForm">
 
 <label for="identifier">
-    Email address or phone number used on
+    Email address used on
     {{ app_name }}
 </label>
 
